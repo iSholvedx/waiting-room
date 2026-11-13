@@ -156,9 +156,7 @@ export default async function handler(req, res) {
 
     // Sesi yang baru admitted menerbitkan izin global.
     // Izin aktif tidak diperpanjang oleh polling biasa.
-    if (newlyAdmitted.length > 0) {
-      await publishGlobalAdmission(now);
-    }
+   
 
     // Jika izin global masih aktif, berikan admission
     // kepada sesi browser ini dengan expiry yang sama.
