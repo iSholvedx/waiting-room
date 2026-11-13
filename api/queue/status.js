@@ -1,5 +1,6 @@
 
 import { sql } from '../../lib/db.js';
+
 import {
   hash,
   randomToken,
@@ -46,7 +47,11 @@ async function createSession() {
 function positionOf(session, now) {
   if (session.status !== 'waiting') return 0;
 
-  const elapsed = Math.max(0, now - Number(session.created_at));
+  const elapsed = Math.max(
+    0,
+    now - Number(session.created_at)
+  );
+
   const steps = Math.floor(elapsed / INTERVAL_MS);
 
   return Math.max(
@@ -55,10 +60,58 @@ function positionOf(session, now) {
   );
 }
 
+async function publishGlobalAdmission(now) {
+  await sql`
+    INSERT INTO global_admission (
+      id,
+      admitted_at,
+      expires_at
+    )
+    VALUES (
+      1,
+      ${now},
+      ${now + HOLD_MS}
+    )
+    ON CONFLICT (id)
+    DO UPDATE SET
+      admitted_at = EXCLUDED.admitted_at,
+      expires_at = EXCLUDED.expires_at
+    WHERE global_admission.expires_at <= EXCLUDED.admitted_at
+  `;
+}
+
+async function applyGlobalAdmission(tokenHash, now) {
+  const [global] = await sql`
+    SELECT admitted_at, expires_at
+    FROM global_admission
+    WHERE id = 1
+      AND expires_at > ${now}
+    LIMIT 1
+  `;
+
+  if (!global) return false;
+
+  await sql`
+    UPDATE queue_sessions
+    SET
+      status = 'admitted',
+      admitted_at = ${Number(global.admitted_at)},
+      expires_at = ${Number(global.expires_at)}
+    WHERE token_hash = ${tokenHash}
+      AND status = 'waiting'
+      AND expires_at IS NULL
+  `;
+
+  return true;
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
-    return sendJson(res, 405, { error: 'Method not allowed' });
+
+    return sendJson(res, 405, {
+      error: 'Method not allowed'
+    });
   }
 
   try {
@@ -77,6 +130,7 @@ export default async function handler(req, res) {
     let token = cookies.wr_queue;
     let session = null;
 
+    // Cari sesi browser saat ini.
     if (token && token.length <= 128) {
       const [existing] = await sql`
         SELECT *
@@ -88,7 +142,7 @@ export default async function handler(req, res) {
       session = existing || null;
     }
 
-    // Buat sesi baru jika cookie belum valid atau sesi expired.
+    // Buat sesi baru jika cookie tidak valid atau expired.
     if (!session || session.status === 'expired') {
       const fresh = await createSession();
 
@@ -105,48 +159,71 @@ export default async function handler(req, res) {
       );
     }
 
-    // Admission berjalan berdasarkan timestamp.
-    // Tidak membutuhkan setInterval atau proses server persisten.
-    const admissionThreshold = now - (
-      INITIAL_POSITION * INTERVAL_MS
-    );
+    const tokenHash = hash(token);
 
-    await sql`
+    // Admission normal berdasarkan waktu antrean.
+    const admissionThreshold =
+      now - (INITIAL_POSITION * INTERVAL_MS);
+
+    const newlyAdmitted = await sql`
       UPDATE queue_sessions
-      SET status = 'admitted',
-          admitted_at = ${now},
-          expires_at = ${now + HOLD_MS}
+      SET
+        status = 'admitted',
+        admitted_at = ${now},
+        expires_at = ${now + HOLD_MS}
       WHERE status = 'waiting'
         AND created_at <= ${admissionThreshold}
+      RETURNING id
     `;
 
-    // Ambil status terbaru setelah proses admission.
+    // Sesi yang baru admitted menerbitkan izin global.
+    // Izin aktif tidak diperpanjang oleh polling biasa.
+    if (newlyAdmitted.length > 0) {
+      await publishGlobalAdmission(now);
+    }
+
+    // Jika izin global masih aktif, berikan admission
+    // kepada sesi browser ini dengan expiry yang sama.
+    await applyGlobalAdmission(tokenHash, now);
+
+    // Ambil status terbaru.
     const [current] = await sql`
       SELECT *
       FROM queue_sessions
-      WHERE token_hash = ${hash(token)}
+      WHERE token_hash = ${tokenHash}
       LIMIT 1
     `;
 
     if (!current) {
+      setCookies(res, responseCookies);
+
       return sendJson(res, 500, {
         error: 'Unable to retrieve queue session'
       });
     }
 
+    // Browser yang admitted memperoleh token sendiri.
     if (
       current.status === 'admitted' ||
       current.status === 'entered'
     ) {
+      const remaining = Math.ceil(
+        (Number(current.expires_at) - now) / 1000
+      );
+
+      if (remaining <= 0) {
+        return sendJson(res, 403, {
+          error: 'Admission expired'
+        });
+      }
+
       const pass = createPassToken(current);
 
       responseCookies.push(
         makeCookie(
           'wr_passed',
           pass,
-          Math.ceil(
-            (Number(current.expires_at) - now) / 1000
-          )
+          remaining
         )
       );
 
@@ -156,11 +233,13 @@ export default async function handler(req, res) {
         state: current.status,
         ticket: current.ticket,
         holdExpiresAt: Number(current.expires_at),
-        serverTime: now
+        serverTime: now,
+        admissionType: 'global-or-individual'
       });
     }
 
     responseCookies.push(clearCookie('wr_passed'));
+
     setCookies(res, responseCookies);
 
     const position = positionOf(current, now);
