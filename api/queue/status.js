@@ -59,27 +59,6 @@ function positionOf(session, now) {
     Number(session.initial_ahead) - steps
   );
 }
-
-async function publishGlobalAdmission(now) {
-  await sql`
-    INSERT INTO global_admission (
-      id,
-      admitted_at,
-      expires_at
-    )
-    VALUES (
-      1,
-      ${now},
-      ${now + HOLD_MS}
-    )
-    ON CONFLICT (id)
-    DO UPDATE SET
-      admitted_at = EXCLUDED.admitted_at,
-      expires_at = EXCLUDED.expires_at
-    WHERE global_admission.expires_at <= EXCLUDED.admitted_at
-  `;
-}
-
 async function applyGlobalAdmission(tokenHash, now) {
   const [global] = await sql`
     SELECT admitted_at, expires_at
