@@ -141,26 +141,31 @@ export default async function handler(req, res) {
     const tokenHash = hash(token);
 
     // Admission normal berdasarkan waktu antrean.
-    const admissionThreshold =
-      now - (INITIAL_POSITION * INTERVAL_MS);
+    // Admission normal berdasarkan waktu antrean.
+const admissionThreshold =
+  now - (INITIAL_POSITION * INTERVAL_MS);
 
-    await sql`
-      UPDATE queue_sessions
-      SET
-        status = 'admitted',
-        admitted_at = ${now},
-        expires_at = ${now + HOLD_MS}
-      WHERE status = 'waiting'
-        AND created_at <= ${admissionThreshold}
-    `;
+await sql`
+  UPDATE queue_sessions
+  SET
+    status = 'admitted',
+    admitted_at = ${now},
+    expires_at = ${now + HOLD_MS}
+  WHERE status = 'waiting'
+    AND created_at <= ${admissionThreshold}
+`;
 
-    // Sesi yang baru admitted menerbitkan izin global.
-    // Izin aktif tidak diperpanjang oleh polling biasa.
-   
+// Jika izin global masih aktif, berikan admission
+// kepada sesi browser ini dengan expiry yang sama.
+await applyGlobalAdmission(tokenHash, now);
 
-    // Jika izin global masih aktif, berikan admission
-    // kepada sesi browser ini dengan expiry yang sama.
-    await applyGlobalAdmission(tokenHash, now);
+// Ambil status terbaru.
+const [current] = await sql`
+  SELECT *
+  FROM queue_sessions
+  WHERE token_hash = ${tokenHash}
+  LIMIT 1
+`;
 
     // Ambil status terbaru.
     const [current] = await sql`
