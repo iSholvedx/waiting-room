@@ -144,7 +144,7 @@ export default async function handler(req, res) {
     const admissionThreshold =
       now - (INITIAL_POSITION * INTERVAL_MS);
 
-    const newlyAdmitted = await sql`
+    await sql`
       UPDATE queue_sessions
       SET
         status = 'admitted',
