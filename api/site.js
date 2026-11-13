@@ -873,45 +873,32 @@ export default async function handler(req, res) {
     // =========================================
 
     function renderProducts() {
-      const filtered = products.filter(function(product) {
-        return activeCategory === 'all' ||
-          product.category === activeCategory;
-      });
+  const filtered = products.filter(function(product) {
+    return activeCategory === 'all' ||
+      product.category === activeCategory;
+  });
 
-      menuGrid.innerHTML = filtered.map(function(product) {
-        return `
-          <article class="food-card">
-            <div class="food-image">
-              <img
-                src="${escapeHTML(product.image)}"
-                alt="${escapeHTML(product.name)}"
-                loading="lazy"
-                onerror="this.style.display='none'"
-              >
-            </div>
-
-            <div class="food-info">
-              <h3>${escapeHTML(product.name)}</h3>
-
-              <p>${escapeHTML(product.description)}</p>
-
-              <div class="food-bottom">
-                <span class="price">
-                  ${formatRupiah(product.price)}
-                </span>
-
-                <button
-                  class="add-button"
-                  data-add="${product.id}"
-                >
-                  + Tambah
-                </button>
-              </div>
-            </div>
-          </article>
-        `;
-      }).join('');
-    }
+  menuGrid.innerHTML = filtered.map(function(product) {
+    return '<article class="food-card">' +
+      '<div class="food-image">' +
+        '<img src="' + escapeHTML(product.image) + '" ' +
+        'alt="' + escapeHTML(product.name) + '" ' +
+        'loading="lazy" onerror="this.style.display=\'none\'">' +
+      '</div>' +
+      '<div class="food-info">' +
+        '<h3>' + escapeHTML(product.name) + '</h3>' +
+        '<p>' + escapeHTML(product.description) + '</p>' +
+        '<div class="food-bottom">' +
+          '<span class="price">' +
+            formatRupiah(product.price) +
+          '</span>' +
+          '<button class="add-button" data-add="' +
+            product.id + '">+ Tambah</button>' +
+        '</div>' +
+      '</div>' +
+    '</article>';
+  }).join('');
+}
 
     // =========================================
     // CART FUNCTIONS
