@@ -948,66 +948,51 @@ export default async function handler(req, res) {
     }
 
     function renderCart() {
-      const ids = Object.keys(cart);
-      const summary = getCartSummary();
+  const ids = Object.keys(cart);
+  const summary = getCartSummary();
 
-      cartCount.textContent = summary.count;
-      cartTotal.textContent = formatRupiah(summary.total);
+  cartCount.textContent = summary.count;
+  cartTotal.textContent = formatRupiah(summary.total);
+  checkoutButton.disabled = summary.count === 0;
 
-      checkoutButton.disabled = summary.count === 0;
+  if (ids.length === 0) {
+    cartItems.innerHTML =
+      '<div class="empty-cart">' +
+        '<div class="emoji">🛍️</div>' +
+        '<p>Keranjangmu masih kosong.</p>' +
+        '<p>Yuk, pilih menu favoritmu!</p>' +
+      '</div>';
 
-      if (ids.length === 0) {
-        cartItems.innerHTML = `
-          <div class="empty-cart">
-            <div class="emoji">🛍️</div>
-            <p>Keranjangmu masih kosong.</p>
-            <p>Yuk, pilih menu favoritmu!</p>
-          </div>
-        `;
+    checkoutForm.classList.remove('show');
+    return;
+  }
 
-        checkoutForm.classList.remove('show');
-        return;
-      }
+  cartItems.innerHTML = ids.map(function(id) {
+    const product = products.find(function(item) {
+      return item.id === Number(id);
+    });
 
-      cartItems.innerHTML = ids.map(function(id) {
-        const product = products.find(function(item) {
-          return item.id === Number(id);
-        });
+    if (!product) return '';
 
-        if (!product) return '';
-
-        return `
-          <div class="cart-item">
-            <div>
-              <div class="cart-item-name">
-                ${escapeHTML(product.name)}
-              </div>
-
-              <div class="cart-item-price">
-                ${formatRupiah(product.price * cart[id])}
-              </div>
-            </div>
-
-            <div class="quantity">
-              <button
-                data-change="${id}"
-                data-value="-1"
-                aria-label="Kurangi ${escapeHTML(product.name)}"
-              >−</button>
-
-              <strong>${cart[id]}</strong>
-
-              <button
-                data-change="${id}"
-                data-value="1"
-                aria-label="Tambah ${escapeHTML(product.name)}"
-              >+</button>
-            </div>
-          </div>
-        `;
-      }).join('');
-    }
-
+    return '<div class="cart-item">' +
+      '<div>' +
+        '<div class="cart-item-name">' +
+          escapeHTML(product.name) +
+        '</div>' +
+        '<div class="cart-item-price">' +
+          formatRupiah(product.price * cart[id]) +
+        '</div>' +
+      '</div>' +
+      '<div class="quantity">' +
+        '<button data-change="' + id +
+        '" data-value="-1">−</button>' +
+        '<strong>' + cart[id] + '</strong>' +
+        '<button data-change="' + id +
+        '" data-value="1">+</button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
     // =========================================
     // EVENT LISTENERS
     // =========================================
