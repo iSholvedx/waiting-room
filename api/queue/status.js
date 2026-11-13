@@ -152,7 +152,6 @@ export default async function handler(req, res) {
         expires_at = ${now + HOLD_MS}
       WHERE status = 'waiting'
         AND created_at <= ${admissionThreshold}
-      RETURNING id
     `;
 
     // Sesi yang baru admitted menerbitkan izin global.
