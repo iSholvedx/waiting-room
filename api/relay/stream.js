@@ -3,7 +3,7 @@ import { neon } from '@neondatabase/serverless';
 const sql = neon(process.env.DATABASE_URL);
 
 export const config = {
-  runtime: 'edge' // ⚠️ Edge runtime — support streaming
+  runtime: 'edge'
 };
 
 export default async function handler(req) {
@@ -16,19 +16,18 @@ export default async function handler(req) {
     return new Response('Missing token or room_id', { status: 400 });
   }
 
-  // Validasi token
   const tokenHash = await sha256(token);
   const devices = await sql`
     SELECT id FROM relay_devices
     WHERE device_token_hash = ${tokenHash} AND active = TRUE
     LIMIT 1
   `;
+
   if (!devices.length) {
     return new Response('Invalid device', { status: 401 });
   }
-  const deviceId = devices[0].id;
 
-  // SSE stream
+  const deviceId = devices[0].id;
   const encoder = new TextEncoder();
   let closed = false;
 
@@ -41,10 +40,15 @@ export default async function handler(req) {
         } catch {}
       };
 
-      // Kirim ping awal biar koneksi kebuka
+      // Handshake awal
       send({ type: 'connected', deviceId });
 
-      // Loop: cek DB tiap 500ms
+      // Ping tiap 15 detik biar koneksi nggak sepi
+      const pingInterval = setInterval(() => {
+        send({ type: 'ping', ts: Date.now() });
+      }, 15000);
+
+      // Poll DB tiap 500ms
       const pollInterval = setInterval(async () => {
         if (closed) return;
         try {
@@ -78,15 +82,17 @@ export default async function handler(req) {
       req.signal.addEventListener('abort', () => {
         closed = true;
         clearInterval(pollInterval);
+        clearInterval(pingInterval);
         try { controller.close(); } catch {}
       });
 
-      // Auto-close setelah 5 menit (biar nggak nyangkut)
+      // Auto-close 4 menit (aman di bawah limit Vercel)
       setTimeout(() => {
         closed = true;
         clearInterval(pollInterval);
+        clearInterval(pingInterval);
         try { controller.close(); } catch {}
-      }, 5 * 60 * 1000);
+      }, 4 * 60 * 1000);
     }
   });
 
