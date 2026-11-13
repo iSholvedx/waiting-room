@@ -160,12 +160,7 @@ await sql`
 await applyGlobalAdmission(tokenHash, now);
 
 // Ambil status terbaru.
-const [current] = await sql`
-  SELECT *
-  FROM queue_sessions
-  WHERE token_hash = ${tokenHash}
-  LIMIT 1
-`;
+
 
     // Ambil status terbaru.
     const [current] = await sql`
