@@ -59,30 +59,6 @@ function positionOf(session, now) {
     Number(session.initial_ahead) - steps
   );
 }
-async function applyGlobalAdmission(tokenHash, now) {
-  const [global] = await sql`
-    SELECT admitted_at, expires_at
-    FROM global_admission
-    WHERE id = 1
-      AND expires_at > ${now}
-    LIMIT 1
-  `;
-
-  if (!global) return false;
-
-  await sql`
-    UPDATE queue_sessions
-    SET
-      status = 'admitted',
-      admitted_at = ${Number(global.admitted_at)},
-      expires_at = ${Number(global.expires_at)}
-    WHERE token_hash = ${tokenHash}
-      AND status = 'waiting'
-      AND expires_at IS NULL
-  `;
-
-  return true;
-}
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -141,28 +117,21 @@ export default async function handler(req, res) {
     const tokenHash = hash(token);
 
     // Admission normal berdasarkan waktu antrean.
-    // Admission normal berdasarkan waktu antrean.
-const admissionThreshold =
-  now - (INITIAL_POSITION * INTERVAL_MS);
+    const admissionThreshold =
+      now - (INITIAL_POSITION * INTERVAL_MS);
 
-await sql`
-  UPDATE queue_sessions
-  SET
-    status = 'admitted',
-    admitted_at = ${now},
-    expires_at = ${now + HOLD_MS}
-  WHERE status = 'waiting'
-    AND created_at <= ${admissionThreshold}
-`;
+    await sql`
+      UPDATE queue_sessions
+      SET
+        status = 'admitted',
+        admitted_at = ${now},
+        expires_at = ${now + HOLD_MS}
+      WHERE token_hash = ${tokenHash}
+        AND status = 'waiting'
+        AND created_at <= ${admissionThreshold}
+    `;
 
-// Jika izin global masih aktif, berikan admission
-// kepada sesi browser ini dengan expiry yang sama.
-await applyGlobalAdmission(tokenHash, now);
-
-// Ambil status terbaru.
-
-
-    // Ambil status terbaru.
+    // Ambil status terbaru untuk sesi browser ini.
     const [current] = await sql`
       SELECT *
       FROM queue_sessions
@@ -210,10 +179,11 @@ await applyGlobalAdmission(tokenHash, now);
         ticket: current.ticket,
         holdExpiresAt: Number(current.expires_at),
         serverTime: now,
-        admissionType: 'global-or-individual'
+        admissionType: 'individual'
       });
     }
 
+    // Sesi yang masih menunggu tidak boleh memiliki pass cookie.
     responseCookies.push(clearCookie('wr_passed'));
 
     setCookies(res, responseCookies);
