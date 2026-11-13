@@ -882,8 +882,8 @@ export default async function handler(req, res) {
     return '<article class="food-card">' +
       '<div class="food-image">' +
         '<img src="' + escapeHTML(product.image) + '" ' +
-        'alt="' + escapeHTML(product.name) + '" ' +
-        'loading="lazy" onerror="this.style.display=\'none\'">' +
+'alt="' + escapeHTML(product.name) + '" ' +
+'loading="lazy" onerror="this.hidden=true">' +
       '</div>' +
       '<div class="food-info">' +
         '<h3>' + escapeHTML(product.name) + '</h3>' +
